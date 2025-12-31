@@ -1,0 +1,179 @@
+Goal of the project
+
+Build a Geode mod (cross-compiled on Linux to Windows 64-bit) that extracts physics-relevant surrounding data around the player in Geometry Dash, as a first step toward an AI (CNN first) that decides each frame whether to jump / press based on the environment (“TAS on the fly” idea later).
+
+We explicitly want to rely on actual collision / hitbox data, not visual decorations.
+
+Toolchain / setup context
+
+You compile on Linux with clang-19 / clang++-19, Ninja, Geode clang-msvc toolchain file:
+
+~/.local/share/Geode/cross-tools/clang-msvc-sdk/clang-msvc.cmake
+
+HOST_ARCH=x86_64, SPLAT_DIR=~/.local/share/Geode/cross-tools/splat
+
+project layout: CMakeLists.txt, mod.json, src/ (multiple .cpp, main.cpp)
+
+You’re using the default geode new generated CMakeLists.txt unchanged.
+
+Key insight: don’t reinvent “hitbox extraction”
+
+You provided the full code of EclipseMenu ShowHitboxes.cpp.
+
+The critical parts we extracted from that file:
+
+Correct way to iterate nearby objects is via GJBaseGameLayer::m_sections spatial grid with indices:
+
+m_leftSectionIndex..m_rightSectionIndex, m_bottomSectionIndex..m_topSectionIndex
+
+and cell sizes via m_sectionSizes[i]->at(j)
+
+This is why your earlier approach using collisionBlocks produced junk (like only object id=1816 that wasn’t near / not in the level).
+
+Correct hitbox geometry sources (same as Eclipse):
+
+If available: use oriented box (play uses obj->m_orientedBox, editor uses obj->getOrientedBox()), corners = m_corners[0..3]
+
+Else: use axis-aligned hitbox via obj->getObjectRect()
+
+For hazards: sometimes use circle hitbox with radius = max(scaleX, scaleY) * obj->m_objectRadius
+
+Important subtlety: calling getObjectRect() can mutate internal state, so Eclipse saves/restores:
+
+m_isObjectRectDirty
+
+m_boxOffsetCalculated
+We mirrored that in our code to avoid side effects.
+
+Filtering used by Eclipse (for relevance / avoiding junk):
+
+skip Decoration
+
+skip not activated / disabled groups
+
+skip player objects themselves
+
+Working prototype 1: dump nearby objects + hitbox shapes
+
+We wrote a PlayLayer hook that:
+
+iterates objects near the player using the sections grid approach
+
+filters decoration/inactive/disabled
+
+prints per object:
+
+object id (m_objectID), type (m_objectType)
+
+distance to player dx/dy
+
+hitbox geometry as either:
+
+CIRCLE(cx, cy, r)
+
+OBB(p0..p3)
+
+AABB(x, y, w, h)
+
+Trigger: pressing K (initially you asked “J” for jump testing, but this phase ended up using K for dumps / toggles).
+
+You tested it by manually checking object IDs around the player and confirmed it matched perfectly (objects correctly identified; decorations excluded as expected due to the filter).
+
+Deciding FOV window values from logs
+
+You posted one dump; we computed extremes from that sample:
+
+min dx ≈ -217.8, max dx ≈ +360.2
+
+min dy ≈ -158.0, max dy ≈ +150.0
+
+We noted this does not prove true screen bounds because the code’s cutoff was much larger (frontX=900, halfY=500), and the log didn’t reach those cutoffs; it only showed there were no relevant objects near edges in that moment.
+
+Working prototype 2: occupancy matrix (grid) from hitboxes
+
+You asked how to handle objects with different shapes/sizes (thin bars vs circles).
+
+Key answer: no ID-based hacks needed because we already have the real collision geometry (AABB/OBB/circle) from game data.
+
+We implemented a basic occupancy grid:
+
+Choose a world window around player: [px - backX, px + frontX] × [py - halfY, py + halfY]
+
+Fixed grid size: W × H
+
+Rasterize by scanning only cells within each shape’s bounding box and checking cell center inside shape:
+
+circle: point-in-circle
+
+OBB: point-in-convex-quad (using cross products)
+
+AABB: point-in-rect
+
+Grid values stored as 0/1.
+
+You wanted to see the matrix, not logs, and you’re on Linux (Steam Proton).
+
+Real-time matrix display method that worked: write to file + watch
+
+Instead of console output, we implemented:
+
+write matrix text to a file each N frames (to limit IO)
+
+atomic-ish update via matrix.txt.tmp then rename to matrix.txt
+
+file path uses Geode mod save dir: Mod::get()->getSaveDir() / "matrix.txt"
+
+Under Proton, Geode returns a Windows-style path like:
+
+C:\users\steamuser\AppData\Local\GeometryDash\geode\mods\sachagd.gdia
+and you found the corresponding Linux path:
+
+/home/sacha/.../compatdata/322170/pfx/drive_c/users/steamuser/AppData/Local/GeometryDash/geode/mods/sachagd.gdia
+
+Viewing live:
+
+watch -n 0.05 --no-title cat "<...>/matrix.txt"
+
+Toggle:
+
+Pressing K toggles writing on/off, and the file header shows enabled=true/false + the reported saveDir.
+
+Known current limitation discovered
+
+Very thin bar hitboxes (thin floor/wall/ceiling pieces) are rarely marked in the matrix even when visible.
+
+Why: current rasterization uses single sample per cell (cell center), so thin shapes can fall between centers.
+
+You tried halving FOV to increase resolution (grain), but it made the view too zoomed-in and still didn’t fully solve it.
+
+We brainstormed non-code solutions for later:
+
+multi-sample per cell (center + corners, or 3×3)
+
+shape-vs-cell intersection tests (best for AABB thin bars)
+
+inflate hitboxes slightly during rasterization
+
+internal higher-res grid + max-pool downsample to fixed CNN input size
+
+(You said to forget this issue for now, but it’s noted as the next likely fix.)
+
+Current state of the project deliverables
+
+You now have a working Geode mod that can:
+
+correctly iterate nearby objects via the sections grid
+
+obtain their collision geometry (AABB/OBB/circle) reliably
+
+build a binary occupancy matrix around the player
+
+export the matrix live to a text file that you can view in a terminal with watch
+
+This is the foundation for the next steps:
+
+categorizing channels (solid/hazard/portal/etc.)
+
+feeding into CNN
+
+later: manipulating jump input per frame (“TAS on the fly”) once perception is solid.

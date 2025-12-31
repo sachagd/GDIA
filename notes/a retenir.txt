@@ -1,0 +1,6 @@
+getposition sur des cercles donne la position centrale
+pour l'instant, si getObjectRadius(obj) > 0 alors on considère que l'objet a une hitboxe en forme de cercles, c'est pas forcément vrai donc ça pourrait poser des pbs
+
+
+find ~ -type f -path '*GeometryDash/geode/mods/*/matrix.txt' 2>/dev/null | head -n 20
+watch -n 0.05 --no-title cat "/home/sacha/snap/steam/common/.local/share/Steam/steamapps/compatdata/322170/pfx/drive_c/users/steamuser/AppData/Local/GeometryDash/geode/mods/sachagd.gdia/matrix.txt"

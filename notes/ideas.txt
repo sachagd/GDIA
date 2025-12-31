@@ -1,0 +1,3 @@
+faire deux cnn avec des grains différents sur les hitboxes, celui avec le grain le plus grand peut regarder plus loin : ça permet de réduire les calculs
+
+
