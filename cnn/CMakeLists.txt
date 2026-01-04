@@ -2,18 +2,19 @@ cmake_minimum_required(VERSION 3.21)
 
 project(cnn_lib LANGUAGES CXX)
 
-file(GLOB_RECURSE CNN_SOURCES CONFIGURE_DEPENDS
-    src/*.cpp
+file(GLOB CNN_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
 )
 
 add_library(cnn_lib STATIC ${CNN_SOURCES})
 
 target_include_directories(cnn_lib PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_compile_features(cnn_lib PUBLIC cxx_std_17)
+target_compile_features(cnn_lib PUBLIC cxx_std_23)
+
+target_link_libraries(cnn_lib PRIVATE dnnl)
 
 # Reminder flags (currently disabled)
 # -O3
