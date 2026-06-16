@@ -1,3 +1,0 @@
-[submodule "external/onednn"]
-	path = external/onednn
-	url = https://github.com/uxlfoundation/oneDNN.git
